@@ -4,10 +4,18 @@ on:
   push:
     branches:
       - main
+  workflow_dispatch:
+  workflow_call:
+    inputs:
+      ref:
+        description: Git ref to build and deploy.
+        required: false
+        type: string
 
 permissions:
   contents: write
   pull-requests: write
+  packages: write
 
 jobs:
   release-please:
@@ -21,7 +29,7 @@ jobs:
         id: release
         uses: googleapis/release-please-action@v5
         with:
-          token: ${{ secrets.PAT }}
+          token: ${{ github.token }}
           release-type: node
           target-branch: main
 
@@ -42,6 +50,8 @@ jobs:
           - { key: none, suffix: '-no-fonts' }
     steps:
       - uses: actions/checkout@v6
+        with:
+          ref: ${{ inputs.ref || github.sha }}
       - uses: actions/setup-node@v6
       - uses: pnpm/action-setup@v6
 
@@ -51,12 +61,14 @@ jobs:
         run: |
           pnpm i
           pnpm run build
+          test -f ./dist/icons/AI.png
+          test -f ./dist/icons/United_States.png
           echo 'board.zash.run.place' > ./dist/CNAME
 
       - name: Deploy 🚀
         uses: peaceiris/actions-gh-pages@v4
         with:
-          github_token: ${{ secrets.PAT }}
+          github_token: ${{ github.token }}
           publish_dir: ./dist
           publish_branch: gh-pages${{ matrix.font.suffix }}
           force_orphan: true
@@ -78,6 +90,8 @@ jobs:
           - { key: none, suffix: '-no-fonts' }
     steps:
       - uses: actions/checkout@v6
+        with:
+          ref: ${{ inputs.ref || github.sha }}
       - uses: actions/setup-node@v6
       - uses: pnpm/action-setup@v6
 
@@ -87,11 +101,14 @@ jobs:
         run: |
           pnpm i
           pnpm run build
+          test -f ./dist/icons/AI.png
+          test -f ./dist/icons/United_States.png
           zip -r dist${{ matrix.font.suffix }}.zip dist
 
       - name: Upload to GitHub Release
         uses: softprops/action-gh-release@v3
         with:
+          token: ${{ github.token }}
           files: dist${{ matrix.font.suffix }}.zip
           tag_name: ${{ needs.release-please.outputs.tag_name }}
 
@@ -101,6 +118,8 @@ jobs:
     if: ${{ needs.release-please.outputs.release_created }}
     steps:
       - uses: actions/checkout@v6
+        with:
+          ref: ${{ inputs.ref || github.sha }}
 
       - name: set up QEMU
         uses: docker/setup-qemu-action@v4
@@ -114,7 +133,7 @@ jobs:
         with:
           registry: ghcr.io
           username: ${{ github.actor }}
-          password: ${{ secrets.PAT }}
+          password: ${{ github.token }}
 
       - name: build and publish ghcr.io docker image
         uses: docker/build-push-action@v7
