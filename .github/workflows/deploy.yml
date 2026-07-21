@@ -20,6 +20,8 @@ permissions:
 jobs:
   release-please:
     runs-on: ubuntu-latest
+    # Release metadata must not block the independently deployable web build.
+    continue-on-error: true
     outputs:
       release_created: ${{ steps.release.outputs.release_created }}
       tag_name: ${{ steps.release.outputs.tag_name }}
