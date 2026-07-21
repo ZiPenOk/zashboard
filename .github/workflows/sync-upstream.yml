@@ -31,12 +31,23 @@ jobs:
           git remote add upstream https://github.com/Zephyruso/zashboard.git
           git fetch upstream main
 
-      - name: Merge new upstream commits
+      - name: Sync changed upstream version
         id: merge
         run: |
+          current_version="$(jq -r '.version' package.json)"
+          upstream_version="$(git show upstream/main:package.json | jq -r '.version')"
+          echo "current_version=$current_version" >> "$GITHUB_OUTPUT"
+          echo "upstream_version=$upstream_version" >> "$GITHUB_OUTPUT"
+
+          if [ "$current_version" = "$upstream_version" ]; then
+            echo 'changed=false' >> "$GITHUB_OUTPUT"
+            echo "Upstream source changed, but its version remains $upstream_version. Skipping sync."
+            exit 0
+          fi
+
           if git merge-base --is-ancestor upstream/main HEAD; then
             echo 'changed=false' >> "$GITHUB_OUTPUT"
-            echo 'Fork is already up to date.'
+            echo "Version $upstream_version is already present in this fork."
             exit 0
           fi
 
@@ -46,6 +57,12 @@ jobs:
           if ! git merge --no-ff --no-edit upstream/main; then
             git merge --abort
             echo '::error title=Upstream merge conflict::Resolve the conflict on main, then re-run this workflow.'
+            exit 1
+          fi
+
+          synced_version="$(jq -r '.version' package.json)"
+          if [ "$synced_version" != "$upstream_version" ]; then
+            echo '::error title=Version mismatch::The merge did not produce the expected upstream version.'
             exit 1
           fi
 
