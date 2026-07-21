@@ -2,13 +2,12 @@ name: Sync Upstream
 
 on:
   schedule:
-    - cron: '23 */6 * * *'
+    # 00:10 China Standard Time (UTC+8).
+    - cron: '10 16 * * *'
   workflow_dispatch:
 
 permissions:
   contents: write
-  pull-requests: write
-  packages: write
 
 concurrency:
   group: upstream-sync

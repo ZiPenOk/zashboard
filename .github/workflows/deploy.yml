@@ -14,27 +14,12 @@ on:
 
 permissions:
   contents: write
-  pull-requests: write
-  packages: write
+
+concurrency:
+  group: build-and-publish
+  cancel-in-progress: false
 
 jobs:
-  release-please:
-    runs-on: ubuntu-latest
-    # Release metadata must not block the independently deployable web build.
-    continue-on-error: true
-    outputs:
-      release_created: ${{ steps.release.outputs.release_created }}
-      tag_name: ${{ steps.release.outputs.tag_name }}
-
-    steps:
-      - name: release-please
-        id: release
-        uses: googleapis/release-please-action@v5
-        with:
-          token: ${{ github.token }}
-          release-type: node
-          target-branch: main
-
   build-and-deploy:
     runs-on: ubuntu-latest
     strategy:
@@ -74,78 +59,70 @@ jobs:
           publish_branch: gh-pages${{ matrix.font.suffix }}
           force_orphan: true
 
-  release-dist:
-    needs: release-please
+      - name: Archive build
+        run: zip -r zashboard${{ matrix.font.suffix }}.zip dist
+
+      - name: Upload release asset
+        uses: actions/upload-artifact@v4
+        with:
+          name: zashboard${{ matrix.font.suffix }}
+          path: zashboard${{ matrix.font.suffix }}.zip
+          if-no-files-found: error
+          retention-days: 1
+
+  publish-release:
+    needs: build-and-deploy
     runs-on: ubuntu-latest
-    if: ${{ needs.release-please.outputs.release_created }}
-    strategy:
-      fail-fast: false
-      matrix:
-        font:
-          - { key: all, suffix: '' }
-          - { key: cdn, suffix: '-cdn-fonts' }
-          - { key: firasans, suffix: '-firasans-only' }
-          - { key: misans, suffix: '-misans-only' }
-          - { key: pingfang, suffix: '-pingfang-only' }
-          - { key: sarasa, suffix: '-sarasa-only' }
-          - { key: none, suffix: '-no-fonts' }
     steps:
       - uses: actions/checkout@v6
         with:
           ref: ${{ inputs.ref || github.sha }}
-      - uses: actions/setup-node@v6
-      - uses: pnpm/action-setup@v6
 
-      - name: Build and Zip the dist folder
-        env:
-          FONT: ${{ matrix.font.key }}
+      - name: Download release assets
+        uses: actions/download-artifact@v4
+        with:
+          pattern: zashboard*
+          path: release
+          merge-multiple: true
+
+      - name: Prepare release metadata
+        id: metadata
         run: |
-          pnpm i
-          pnpm run build
-          test -f ./dist/icons/AI.png
-          test -f ./dist/icons/United_States.png
-          zip -r dist${{ matrix.font.suffix }}.zip dist
+          release_date="$(TZ=Asia/Shanghai date '+%Y-%m-%d')"
+          release_time="$(TZ=Asia/Shanghai date '+%Y-%m-%d %H:%M %Z')"
+          echo "tag=$release_date" >> "$GITHUB_OUTPUT"
+          echo "title=Zashboard 自动构建 - $release_date" >> "$GITHUB_OUTPUT"
+          cat > RELEASE_NOTES.md <<EOF
+          ## 自动构建更新
 
-      - name: Upload to GitHub Release
-        uses: softprops/action-gh-release@v3
-        with:
-          token: ${{ github.token }}
-          files: dist${{ matrix.font.suffix }}.zip
-          tag_name: ${{ needs.release-please.outputs.tag_name }}
+          - 更新日期（中国标准时间）：$release_time
+          - 日期 Tag：\`$release_date\`
+          - 源码提交：[\`${GITHUB_SHA::7}\`](https://github.com/$GITHUB_REPOSITORY/commit/$GITHUB_SHA)
+          - 提交说明：$(git log -1 --pretty=%s)
+          - 产物包含 \`icons\` 自定义图标目录。
 
-  release-image:
-    needs: release-please
-    runs-on: ubuntu-latest
-    if: ${{ needs.release-please.outputs.release_created }}
-    steps:
-      - uses: actions/checkout@v6
-        with:
-          ref: ${{ inputs.ref || github.sha }}
+          本 Release 始终只保留最新构建，ZIP 文件会在后续成功构建时直接覆盖。
+          EOF
 
-      - name: set up QEMU
-        uses: docker/setup-qemu-action@v4
+      - name: Update latest release
+        env:
+          GH_TOKEN: ${{ github.token }}
+          RELEASE_TAG: ${{ steps.metadata.outputs.tag }}
+          RELEASE_TITLE: ${{ steps.metadata.outputs.title }}
+        run: |
+          existing_tag="$(gh release list --limit 1 --json tagName --jq '.[0].tagName // empty')"
 
-      - name: set up docker buildx
-        uses: docker/setup-buildx-action@v4
-        id: buildx
+          git tag -f "$RELEASE_TAG" "$GITHUB_SHA"
+          git push origin "refs/tags/$RELEASE_TAG" --force
 
-      - name: login to ghcr.io
-        uses: docker/login-action@v4
-        with:
-          registry: ghcr.io
-          username: ${{ github.actor }}
-          password: ${{ github.token }}
+          if [ -z "$existing_tag" ]; then
+            gh release create "$RELEASE_TAG" --title "$RELEASE_TITLE" --notes-file RELEASE_NOTES.md --latest
+          else
+            if [ "$existing_tag" != "$RELEASE_TAG" ]; then
+              gh release edit "$existing_tag" --tag "$RELEASE_TAG"
+              git push origin ":refs/tags/$existing_tag" || true
+            fi
+            gh release edit "$RELEASE_TAG" --title "$RELEASE_TITLE" --notes-file RELEASE_NOTES.md --latest
+          fi
 
-      - name: build and publish ghcr.io docker image
-        uses: docker/build-push-action@v7
-        with:
-          context: .
-          builder: ${{ steps.buildx.outputs.name }}
-          file: Dockerfile
-          platforms: linux/amd64,linux/arm64,linux/arm/v7
-          push: true
-          tags: |
-            ghcr.io/zephyruso/zashboard:latest
-            ghcr.io/zephyruso/zashboard:${{ needs.release-please.outputs.tag_name }}
-          cache-from: type=gha
-          cache-to: type=gha,mode=max
+          gh release upload "$RELEASE_TAG" release/*.zip --clobber
