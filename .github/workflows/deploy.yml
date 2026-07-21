@@ -90,13 +90,16 @@ jobs:
         run: |
           release_date="$(TZ=Asia/Shanghai date '+%Y-%m-%d')"
           release_time="$(TZ=Asia/Shanghai date '+%Y-%m-%d %H:%M %Z')"
+          source_version="$(node -p \"require('./package.json').version\")"
           echo "tag=$release_date" >> "$GITHUB_OUTPUT"
-          echo "title=Zashboard 自动构建 - $release_date" >> "$GITHUB_OUTPUT"
+          echo "version=$source_version" >> "$GITHUB_OUTPUT"
+          echo "title=Zashboard v$source_version 自动构建 - $release_date" >> "$GITHUB_OUTPUT"
           cat > RELEASE_NOTES.md <<EOF
           ## 自动构建更新
 
           - 更新日期（中国标准时间）：$release_time
           - 日期 Tag：\`$release_date\`
+          - 源码版本：\`v$source_version\`
           - 源码提交：[\`${GITHUB_SHA::7}\`](https://github.com/$GITHUB_REPOSITORY/commit/$GITHUB_SHA)
           - 提交说明：$(git log -1 --pretty=%s)
           - 产物包含 \`icons\` 自定义图标目录。
