@@ -7,6 +7,8 @@ on:
 
 permissions:
   contents: write
+  pull-requests: write
+  packages: write
 
 concurrency:
   group: upstream-sync
