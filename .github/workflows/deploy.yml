@@ -90,7 +90,7 @@ jobs:
         run: |
           release_date="$(TZ=Asia/Shanghai date '+%Y-%m-%d')"
           release_time="$(TZ=Asia/Shanghai date '+%Y-%m-%d %H:%M %Z')"
-          source_version="$(node -p \"require('./package.json').version\")"
+          source_version="$(jq -r '.version' package.json)"
           echo "tag=$release_date" >> "$GITHUB_OUTPUT"
           echo "version=$source_version" >> "$GITHUB_OUTPUT"
           echo "title=Zashboard v$source_version 自动构建 - $release_date" >> "$GITHUB_OUTPUT"
