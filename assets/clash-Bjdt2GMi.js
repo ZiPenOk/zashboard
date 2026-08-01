@@ -1,0 +1,1 @@
+import{B as e,V as t,i as n}from"./index-DdiOcFn_.js";var r=async()=>{n.value=(await e()).data},i=async e=>{await t(e),r()};export{r as fetchConfigs,i as updateConfigs};
