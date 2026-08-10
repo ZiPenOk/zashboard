@@ -18,6 +18,7 @@ jobs:
     runs-on: ubuntu-latest
     outputs:
       changed: ${{ steps.merge.outputs.changed }}
+      should_deploy: ${{ steps.release.outputs.should_deploy }}
     steps:
       - name: Check out fork
         uses: actions/checkout@v6
@@ -72,9 +73,29 @@ jobs:
         if: steps.merge.outputs.changed == 'true'
         run: git push origin HEAD:main
 
+      - name: Check release state
+        id: release
+        env:
+          GH_TOKEN: ${{ github.token }}
+          CURRENT_VERSION: ${{ steps.merge.outputs.current_version }}
+          SOURCE_CHANGED: ${{ steps.merge.outputs.changed }}
+        run: |
+          latest_release="$(gh release list --limit 1 --json name --jq '.[0].name // empty')"
+          latest_version="$(printf '%s\n' "$latest_release" | sed -n 's/^Zashboard v\([^ ]*\).*$/\1/p')"
+
+          should_deploy=false
+          if [ "$SOURCE_CHANGED" = 'true' ] || [ "$latest_version" != "$CURRENT_VERSION" ]; then
+            should_deploy=true
+          fi
+
+          echo "Latest release version: ${latest_version:-<none>}"
+          echo "Source version: $CURRENT_VERSION"
+          echo "Deploy required: $should_deploy"
+          echo "should_deploy=$should_deploy" >> "$GITHUB_OUTPUT"
+
   deploy:
     needs: sync
-    if: needs.sync.outputs.changed == 'true'
+    if: needs.sync.outputs.should_deploy == 'true'
     uses: ./.github/workflows/deploy.yml
     with:
       ref: main
