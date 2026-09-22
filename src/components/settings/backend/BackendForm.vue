@@ -1,15 +1,15 @@
-<!--
-  后端连接参数的表单字段。新增与编辑共用同一份 —— 两处字段本就该一致。
-
-  disableUpgradeCore / disableTunMode 有意不在这里出现:它们是给通过 URL 参数
-  下发后端的场景用的(见 getBackendFromUrl),由分发方决定藏掉哪些功能,
-  不是手填地址的人要操心的东西。编辑时原样带过,不清空。
-
-  这里只管字段。可达性探测留在父级:登录页要根据探测结果决定能不能自动登录,
-  探测状态藏进子组件父级就读不到了。
--->
 <template>
   <div class="flex flex-col gap-3">
+    <div class="flex flex-col gap-1">
+      <label class="text-sm">{{ $t('backendType') }}</label>
+      <SegmentedControl
+        block
+        :model-value="model.type"
+        :options="backendTypeOptions"
+        @update:model-value="setBackendType($event as BackendType)"
+      />
+    </div>
+
     <div class="flex gap-2">
       <div class="flex w-24 flex-none flex-col gap-1">
         <label class="text-sm">{{ $t('protocol') }}</label>
@@ -66,7 +66,7 @@
     </div>
 
     <div class="flex flex-col gap-1">
-      <label class="text-sm">{{ $t('password') }}</label>
+      <label class="text-sm">{{ isDae ? $t('token') : $t('password') }}</label>
       <input
         type="password"
         class="input input-sm w-full"
@@ -78,10 +78,23 @@
 </template>
 
 <script setup lang="ts">
-import TextInput from '@/components/common/TextInput.vue'
+import SegmentedControl from '@/components/common/SegmentedControl.vue'
 import SelectInput from '@/components/common/SelectInput.vue'
-import type { Backend } from '@/types'
+import TextInput from '@/components/common/TextInput.vue'
+import type { Backend, BackendType } from '@/types'
 import { QuestionMarkCircleIcon } from '@heroicons/vue/24/outline'
+import { computed } from 'vue'
 
 const model = defineModel<Omit<Backend, 'uuid'>>({ required: true })
+
+const backendTypeOptions = [
+  { value: 'clash' as BackendType, label: 'Clash' },
+  { value: 'dae' as BackendType, label: 'dae' },
+]
+
+const isDae = computed(() => model.value.type === 'dae')
+
+const setBackendType = (type: BackendType) => {
+  model.value = { ...model.value, type }
+}
 </script>
